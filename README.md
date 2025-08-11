@@ -33,9 +33,9 @@ virtual machine without any issues.
 
 ## Supported Go versions
 
-_Requires Go >= 1.18+._
+_Requires Go >= 1.21+._
 
-`mbtileserver` uses go modules and follows standard practices as of Go 1.18.
+`mbtileserver` uses go modules and follows standard practices as of Go 1.21.
 
 ## Installation
 
@@ -66,7 +66,7 @@ Flags:
       --disable-preview            Disable map preview for each tileset (enabled by default)
       --disable-svc-list           Disable services list endpoint (enabled by default)
       --disable-tilejson           Disable TileJSON endpoint for each tileset (enabled by default)
-      --domain string              Domain name of this server.  NOTE: only used for AutoTLS.
+      --domain string              Domain name of this server.  NOTE: only used for Auto TLS.
       --dsn string                 Sentry DSN
       --enable-arcgis              Enable ArcGIS Mapserver endpoints
       --enable-fs-watch            Enable reloading of tilesets by watching filesystem
@@ -76,12 +76,12 @@ Flags:
       --host string                IP address to listen on. Default is all interfaces. (default "0.0.0.0")
   -k, --key string                 TLS private key
       --missing-image-tile-404     Return HTTP 404 error code when image tile is misssing instead of default behavior to return blank PNG
-  -p, --port int                   Server port. Default is 443 if --cert or --tls options are used, otherwise 8000. (default -1)
+  -p, --port int                   Server port.  Default is 443 if --cert or --tls options are used, otherwise 8000. (default -1)
   -r, --redirect                   Redirect HTTP to HTTPS
       --root-url string            Root URL of services endpoint (default "/services")
   -s, --secret-key string          Shared secret key used for HMAC request authentication
       --tiles-only                 Only enable tile endpoints (shortcut for --disable-svc-list --disable-tilejson --disable-preview)
-  -t, --tls                        Auto TLS via Let's Encrypt
+  -t, --tls                        Auto TLS via Let's Encrypt.  Requires domain to be set
   -v, --verbose                    Verbose logging
 ```
 
@@ -231,8 +231,9 @@ server {
    <other config options>
 
     location /services {
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Host $server_name;
+        proxy_set_header Host $http_host;
+	proxy_set_header X-Forwarded-Proto $scheme;
+	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Ssl on;
         proxy_pass http://localhost:8000;
@@ -259,7 +260,7 @@ To run the Docker container on port 8080 with your tilesets in `<host tile dir>`
 Note that by default, `mbtileserver` runs on port 8000 in the container.
 
 ```
-docker run --rm -p 8080:8000 -v <host tile dir>:/tilesets  consbio/mbtileserver
+docker run --rm -p 8080:8000 -v <host tile dir>:/tilesets  ghcr.io/consbio/mbtileserver:latest
 ```
 
 You can pass in additional command-line arguments to `mbtileserver`, for example, to use
@@ -267,7 +268,7 @@ certificates and files in `<host cert dir>` so that you can access the server vi
 [`mkcert`](https://github.com/FiloSottile/mkcert). This example uses automatic redirects, which causes `mbtileserver` to also listen on port 80 and automatically redirect to 443.
 
 ```
-docker run  --rm -p 80:80 443:443 -v <host tile dir>:/tilesets -v <host cert dir>:/certs/ consbio/mbtileserver -c /certs/localhost.pem -k /certs/localhost-key.pem -p 443 --redirect
+docker run  --rm -p 80:80 -p 443:443 -v <host tile dir>:/tilesets -v <host cert dir>:/certs/ ghcr.io/consbio/mbtileserver:latest -c /certs/localhost.pem -k /certs/localhost-key.pem -p 443 --redirect
 ```
 
 Alternately, use `docker-compose` to run:
@@ -504,8 +505,8 @@ go build -a .
 
 to make subsequent builds much faster.
 
-Development of the templates and static assets likely requires using
-`node` and `npm`. Install these tools in the normal way.
+Development of the templates and static assets requires using
+NodeJS 20 and `npm`. Install these tools in the normal way.
 
 From the `handlers/templates/static` folder, run
 

@@ -1,4 +1,4 @@
-FROM golang:1.21-bullseye
+FROM golang:1.23-bookworm
 
 RUN \
     apt-get update && \
