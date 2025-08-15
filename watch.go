@@ -113,6 +113,7 @@ func (w *FSWatcher) handleFileChange(path, baseDir string) {
 		log.Debugf("Tileset %q is currently being written", path)
 		return
 	}
+	// Skip files still being written (SQLite -wal)
 	if _, err := os.Stat(path + "-wal"); err == nil {
 		log.Debugf("Tileset %q is currently being written (wal)", path)
 		return
@@ -123,7 +124,7 @@ func (w *FSWatcher) handleFileChange(path, baseDir string) {
 		return
 	}
 	db.Close()
-
+	// Valid mbtiles file
 	id, err := w.generateID(path, baseDir)
 	if err != nil {
 		log.Errorf("Failed to generate ID: %v", err)
@@ -150,6 +151,7 @@ func (w *FSWatcher) handleFileChange(path, baseDir string) {
 	}
 }
 
+// handleFileRemove processes a file removal event for  mbtiles file.
 func (w *FSWatcher) handleFileRemove(path, baseDir string) {
 	id, err := w.generateID(path, baseDir)
 	if err != nil {
@@ -168,7 +170,7 @@ func (w *FSWatcher) handleFileRemove(path, baseDir string) {
 // polling directories for changes to mbtiles files
 func (w *FSWatcher) startPolling(baseDir string, interval time.Duration) {
 	log.Infof("Using polling mode to watch %s every %v", baseDir, interval)
-
+	// fileState holds the modification time and size of a file
 	type fileState struct {
 		ModTime time.Time
 		Size    int64
@@ -176,7 +178,7 @@ func (w *FSWatcher) startPolling(baseDir string, interval time.Duration) {
 
 	dirCache := make(map[string]map[string]fileState)
 	mu := sync.Mutex{}
-
+	// scanDir scans the directory for mbtiles files and returns a map of their states
 	scanDir := func(path string) map[string]fileState {
 		files := make(map[string]fileState)
 		filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
@@ -199,7 +201,7 @@ func (w *FSWatcher) startPolling(baseDir string, interval time.Duration) {
 		w.handleFileChange(p, baseDir)
 	}
 	mu.Unlock()
-
+	// Start polling ticker
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -231,7 +233,7 @@ func (w *FSWatcher) startPolling(baseDir string, interval time.Duration) {
 func (w *FSWatcher) WatchDir(baseDir string) error {
 	fsType := detectFSType(baseDir)
 	log.Infof("Detected filesystem type: %s", fsType)
-
+	// Use polling mode for network filesystems
 	if isNetworkFS(fsType) {
 		// Network disk → polling mode
 		go w.startPolling(baseDir, 5*time.Second)
@@ -241,7 +243,7 @@ func (w *FSWatcher) WatchDir(baseDir string) error {
 	// Local disk → fsnotify mode
 	c := make(chan string, 1024) // buffered to prevent blocking
 	exit := make(chan struct{})
-
+	// Ensure the watcher is closed when done
 	go debounce(500*time.Millisecond, c, exit,
 		func(path string) {
 			id, err := w.generateID(path, baseDir)
