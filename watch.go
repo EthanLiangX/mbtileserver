@@ -14,7 +14,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ===================== debounce =====================
+// debounce debounces requests to a callback function to occur no more
+// frequently than interval; once this is reached, the callback is called.
+//
+// Unique values sent to the channel are stored in an internal map and all
+// are processed once  the interval is up.
 func debounce(interval time.Duration, input chan string, exit chan struct{}, firstCallback func(arg string), callback func(arg string)) {
 	var items = make(map[string]bool)
 	var item string
@@ -42,7 +46,7 @@ func debounce(interval time.Duration, input chan string, exit chan struct{}, fir
 	}
 }
 
-// ================== File system detection ==================
+// fsTypeMap maps filesystem type identifiers to human-readable names.
 var fsTypeMap = map[int64]string{
 	0xEF53:     "ext2/ext3/ext4",
 	0x58465342: "xfs",
@@ -52,6 +56,7 @@ var fsTypeMap = map[int64]string{
 	0x65735546: "fuse",
 }
 
+// detectFSType detects the filesystem type of the given path using
 func detectFSType(path string) string {
 	var stat unix.Statfs_t
 	if err := unix.Statfs(path, &stat); err != nil {
@@ -64,18 +69,24 @@ func detectFSType(path string) string {
 	return "unknown"
 }
 
+// isNetworkFS checks if the given filesystem type is a network filesystem.
 func isNetworkFS(fs string) bool {
 	return fs == "nfs" || fs == "cifs" || fs == "fuse" || fs == "unknown"
 }
 
-// FSWatcher ================== FSWatcher ==================
+// FSWatcher provides a filesystem watcher to detect when mbtiles files are
+// created, updated, or removed on the filesystem.
 type FSWatcher struct {
 	watcher    *fsnotify.Watcher
 	svcSet     *handlers.ServiceSet
 	generateID handlers.IDGenerator
 }
 
-// NewFSWatcher ================== Constructor and Close ==================
+// NewFSWatcher creates a new FSWatcher to watch the filesystem for changes to
+// mbtiles files and updates the ServiceSet accordingly.
+//
+// The generateID function needs to be of the same type used when the tilesets
+// were originally added to the ServiceSet.
 func NewFSWatcher(svcSet *handlers.ServiceSet, generateID handlers.IDGenerator) (*FSWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -88,13 +99,14 @@ func NewFSWatcher(svcSet *handlers.ServiceSet, generateID handlers.IDGenerator) 
 	}, nil
 }
 
+// Close closes the FSWatcher and stops watching the filesystem.
 func (w *FSWatcher) Close() {
 	if w.watcher != nil {
 		w.watcher.Close()
 	}
 }
 
-// ================== Common file handling ==================
+// handleFileChange processes a file change event for  mbtiles file.
 func (w *FSWatcher) handleFileChange(path, baseDir string) {
 	// Skip files still being written (SQLite -journal or -wal)
 	if _, err := os.Stat(path + "-journal"); err == nil {
@@ -153,7 +165,7 @@ func (w *FSWatcher) handleFileRemove(path, baseDir string) {
 	}
 }
 
-// ================== High-performance polling ==================
+// polling directories for changes to mbtiles files
 func (w *FSWatcher) startPolling(baseDir string, interval time.Duration) {
 	log.Infof("Using polling mode to watch %s every %v", baseDir, interval)
 
@@ -215,7 +227,7 @@ func (w *FSWatcher) startPolling(baseDir string, interval time.Duration) {
 	}
 }
 
-// WatchDir ================== WatchDir with auto mode ==================
+// WatchDir sets up the filesystem watcher for baseDir and all existing subdirectories
 func (w *FSWatcher) WatchDir(baseDir string) error {
 	fsType := detectFSType(baseDir)
 	log.Infof("Detected filesystem type: %s", fsType)
